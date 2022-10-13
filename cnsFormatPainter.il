@@ -1,4 +1,11 @@
 
+; use cnsHandle=cnmpsImport() to connect the skill engine to the DEHDL session that started the engine
+; in DEHDL console, type 'system'
+; a cmd window opens. type 'start cnskill -i -nongraph'
+; the skill console opens. close the cmd window from the previous step to give control back to DEHDL.
+; use load("cnsFormatPainter.il") to load this file
+; use 'ImportHandle=cnmpsImport()', gets a handle to the running DEHDL instance.
+; pass the handle to the procedures that use a DEHDL handle
 
 ImportHandle=cnmpsImport()
 
@@ -18,6 +25,7 @@ verbose=cnSetRunOptions(?result cnOUT_VERBOSE ?display cnOUT_VERBOSE)
 ; figure out which component the user is closest to the cursor when the button was clicked,
 ; since there doesn't seem to be a simpler way to get info about the selected object.
 procedure( getMouseButtonCallback( event coord ) 
+  ; TODO: do I need to check which mouse button was pressed?
   printf("test\n")
   xy = cnGetMouseXY(event)
   coord = set(coord xy)
@@ -28,10 +36,12 @@ procedure( formatPainter()
   let(
     ; local variable declarations
     (
-      cmd_ret_obj prm_obj_set prop_obj_set
+      cmd_ret_obj prm_obj_set comp_obj_set
+      topLeft botRight
+      cmd
+      comp_dbid
     )
-    ; send "select all" command to DEHDL
-    ; cmd_ret_obj=cnSendCommand(ImportHandle "select properties all" ?runOptions verbose)
+
     mouse_coord=nil
     cnRequestMousePress(ImportHandle, `getMouseButtonCallback, `mouse_coord, "click on a component")
     ; wait for the callback to finish
@@ -39,15 +49,19 @@ procedure( formatPainter()
       cnmpsSleep(ImportHandle 1)
       ; TODO: get user input in this loop so i don't get stuck
     )
-    ; TODO: select components within bounding box?
+    ; I can't seem to figure out how to get a handle to a component object, other than trying to select
+    ; whatever component is close to the cursor when the mouse button was clicked.
+    ; create a 200x200 bounding box to find components within. TODO: figure out how small I can make this
     topLeft = nth(0 mouse_coord)-100 : nth(1 mouse_coord)+100
     botRight = nth(0 mouse_coord)+100 : nth(1 mouse_coord)-100
+    
+    ; dwgId=cnGetDwgId(cnFindActiveDwg(cnGetDwgInfo(ImportHandle)))
+    
+    ; issue a "select" command in DEHDL. returns "bodies" within the bounding box.
     cmd = strcat("select A bodies " cnCreatePointString(topLeft) " " cnCreatePointString(botRight))
-
-    dwgId=cnGetDwgId(cnFindActiveDwg(cnGetDwgInfo(ImportHandle)))
-
-    ; cmd_ret_obj=cnSendCommand(ImportHandle cmd ?runOptions verbose)
     cmd_ret_obj=cnSendCommand(ImportHandle cmd ?runOptions verbose)
+
+    ; test code: make sure something got returned
     printf("command return object length: %d\n" length(cmd_ret_obj))
     printf("%L\n" cmd_ret_obj)
 
@@ -65,13 +79,36 @@ procedure( formatPainter()
     foreach(comp comp_obj_set
       printf("name: %s\n" cnGetCompName(comp))
       printf("loc: %L\n" cnGetCompOriginXY(comp))
+      printf("dbid: %s\n" cnGetCompDbId(comp))
     )
+
+    ; hopefully there is only one component in the comp_obj_set, but maybe there will be more because
+    ; of the size of the bounding box. I'll have to figure that out. TBD.
+    comp_dbid = cnGetCompDbId(nth(0 comp_obj_set))
+
+    ; since i can't just get the properties attached to that component,
     ; TODO: select all of the properties in the drawing and loop through each to check
     ; if their owner is the above component.
     ; if the property is visible, save its relative XY location.
     ; selecting a different component, look for the same property name and set its visibility and
     ; relative xy.
 
+    cmd_ret_obj=cnSendCommand(ImportHandle "select properties all" ?runOptions verbose)
+    prm_obj_set=cnGetGroupedObjectSet(cmd_ret_obj)
+    list_prop_objs=cnGetProps(prm_obj_set)
+    foreach(prop_obj list_prop_objs
+      ; check if the property belongs to the component found earlier
+      if( (cnGetPropOwnerDbId(prop_obj) == comp_dbid) then
+        prop_name=cnGetPropName(prop_obj)
+        prop_value=cnGetPropValue(prop_obj)
+        if( (prop_value != nil) 
+          then
+            printf("Found property %s=%s attached to component\n" prop_name prop_value)
+          else
+            printf("Found property %s attached to component\n" prop_name)
+        )
+      )
+    )
     ; loop through each propery
     ; foreach(property prop_obj_set
     ;   ; check if the property's owner is a component
@@ -92,6 +129,7 @@ procedure( formatPainter()
     ;   )
     ; )
   )
+  t
 )
 
 procedure( formatPainterCallback()

@@ -39,7 +39,7 @@ procedure( formatPainter()
       cmd_ret_obj prm_obj_set comp_obj_set
       topLeft botRight
       cmd
-      comp_dbid
+      comp_obj comp_dbid comp_xy
     )
 
     mouse_coord=nil
@@ -76,15 +76,11 @@ procedure( formatPainter()
     ; printf("property object set length %d\n", length(prop_obj_set))
     printf("component object set length %d\n", length(comp_obj_set))
 
-    foreach(comp comp_obj_set
-      printf("name: %s\n" cnGetCompName(comp))
-      printf("loc: %L\n" cnGetCompOriginXY(comp))
-      printf("dbid: %s\n" cnGetCompDbId(comp))
-    )
-
     ; hopefully there is only one component in the comp_obj_set, but maybe there will be more because
     ; of the size of the bounding box. I'll have to figure that out. TBD.
-    comp_dbid = cnGetCompDbId(nth(0 comp_obj_set))
+    comp_obj = nth(0 comp_obj_set)
+    comp_dbid = cnGetCompDbId(comp_obj)
+    comp_xy = cnGetCompOriginXY(comp_obj)
 
     ; since i can't just get the properties attached to that component,
     ; TODO: select all of the properties in the drawing and loop through each to check
@@ -101,11 +97,17 @@ procedure( formatPainter()
       if( (cnGetPropOwnerDbId(prop_obj) == comp_dbid) then
         prop_name=cnGetPropName(prop_obj)
         prop_value=cnGetPropValue(prop_obj)
+        prop_xy=cnGetPropXY(prop_obj)
+        ; get relative location
+        relative_x = nth(0 prop_xy) - nth(0 comp_xy) ; rel x
+        relative_y = nth(1 prop_xy) - nth(1 comp_xy) ; rel x
+        relative_xy = (relative_x : relative_y)
+        prop_visibility=cnGetPropVisibility(prop_obj)
         if( (prop_value != nil) 
           then
-            printf("Found property %s=%s attached to component\n" prop_name prop_value)
+            printf("Found property %s=%s attached to component at %s (visibility=%d)\n" prop_name prop_value cnCreatePointString(relative_xy) prop_visibility)
           else
-            printf("Found property %s attached to component\n" prop_name)
+            printf("Found property %s attached to component at %s (visibility=%d)\n" prop_name cnCreatePointString(relative_xy) prop_visibility)
         )
       )
     )

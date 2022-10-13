@@ -1,0 +1,6 @@
+{startup.scr}
+mpsdeclare cnsFormatPainter
+	mpstool=Server
+	mpsruncommand="cnskill -nongraph -i cnsFormatPainter.il"
+	mpstimeout=35
+;

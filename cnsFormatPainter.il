@@ -26,7 +26,6 @@ verbose=cnSetRunOptions(?result cnOUT_VERBOSE ?display cnOUT_VERBOSE)
 ; since there doesn't seem to be a simpler way to get info about the selected object.
 procedure( getMouseButtonCallback( event coord ) 
   ; TODO: do I need to check which mouse button was pressed?
-  printf("test\n")
   xy = cnGetMouseXY(event)
   coord = set(coord xy)
   printf("Clicked coordinate: %L\n",coord)
@@ -67,20 +66,31 @@ procedure( getClickedComponent(prompt)
 
     ; hopefully there is only one component in the comp_obj_set, but maybe there will be more because
     ; of the size of the bounding box. I'll have to figure that out. TBD.
-    comp_obj = nth(0 comp_obj_set)
+    if( (length(comp_obj_set) == 1)
+      then
+        comp_obj = nth(0 comp_obj_set)
+      else if( (length(comp_obj_set) > 1) then
+        printf("catch error case: more than one object found within bounding box\n")
+        comp_obj = nil
+      ) else
+        comp_obj = nil
+    )
   )
 )
 
-procedure( getAttachedProperties( comp_dbid list_prop_objs )
-  ; input the database ID of the component and a list of properties to check ownership against
+procedure( getAttachedProperties( component list_prop_objs )
+  ; input the component object and a list of properties to check ownership against
   let(
     (
       list_attached_properties
+      comp_dbid comp_xy
       prop_name prop_value prop_xy
       relative_x relative_y relative_xy
       prop_visibility
     )
 
+    comp_dbid = cnGetCompDbId(component)
+    comp_xy = cnGetCompOriginXY(component)
     list_attached_properties = list()
     foreach(prop_obj list_prop_objs
       ; check if the property belongs to the component found earlier
@@ -112,12 +122,12 @@ procedure( formatPainter()
     ; local variable declarations
     (
       cmd_ret_obj prm_obj_set list_prop_objs
-      comp_obj comp_dbid comp_xy
+      copy_component
     )
 
-    comp_obj = getClickedComponent("click the component to copy")
-    comp_dbid = cnGetCompDbId(comp_obj)
-    comp_xy = cnGetCompOriginXY(comp_obj)
+    copy_component = getClickedComponent("click the component to copy\n")
+
+    ; TODO: make sure getClickedComponent returned something before continuing
 
     ; TODO:
     ; since i can't just get the properties attached to that component,
@@ -127,11 +137,14 @@ procedure( formatPainter()
     ; selecting a different component, look for the same property name and set its visibility and
     ; relative xy.
 
-    cmd_ret_obj=cnSendCommand(ImportHandle "select properties all" ?runOptions verbose)
-    prm_obj_set=cnGetGroupedObjectSet(cmd_ret_obj)
-    list_prop_objs=cnGetProps(prm_obj_set)
+    cmd_ret_obj = cnSendCommand(ImportHandle "select properties all" ?runOptions verbose)
+    prm_obj_set = cnGetGroupedObjectSet(cmd_ret_obj)
+    list_prop_objs = cnGetProps(prm_obj_set) ; this list contains all of the properties on the drawing, if I'm not mistaken
 
-    copy_props=getAttachedProperties(comp_dbid list_prop_objs)
+    copy_props = getAttachedProperties(copy_component list_prop_objs) ; the properties attached to copy_component
+
+    paste_component = getClickedComponent("click the component to paste\n")
+    paste_props = getAttachedProperties(paste_component list_prop_objs)
 
   )
   t

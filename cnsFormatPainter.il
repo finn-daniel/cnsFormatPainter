@@ -113,17 +113,9 @@ procedure( formatPainter()
 
     ; TODO: make sure getClickedComponent returned something before continuing
 
-    ; TODO:
-    ; since i can't just get the properties attached to that component,
-    ; select all of the properties in the drawing and loop through each to check
-    ; if their owner is the above component.
-    ; if the property is visible, save its relative XY location.
-    ; selecting a different component, look for the same property name and set its visibility and
-    ; relative xy.
-
     cmd_ret_obj = cnSendCommand(ImportHandle "select properties all" ?runOptions verbose)
     prm_obj_set = cnGetGroupedObjectSet(cmd_ret_obj)
-    list_prop_objs = cnGetProps(prm_obj_set) ; this list contains all of the properties on the drawing, if I'm not mistaken
+    list_prop_objs = cnGetProps(prm_obj_set) ; this list contains all of the properties on the drawing
 
     copy_props = getAttachedProperties(copy_component list_prop_objs) ; the properties attached to copy_component
     copy_comp_xy = cnGetCompOriginXY(copy_component)
@@ -144,7 +136,7 @@ procedure( formatPainter()
             ; found a matching property
             c_prop_value=cnGetPropValue(c_prop)
             c_relative_xy = getPropertyRelativeXY(copy_component c_prop)
-            setPropertyRelativeXY(paste_component p_prop c_relative_xy)
+            setPropertyVisAndXY(paste_component p_prop c_relative_xy c_prop_visibility)
             if( (prop_value != nil) 
               then
                 printf("Found property %s=%s attached to component at %s (visibility=%d)\n" c_prop_name c_prop_value cnCreatePointString(c_relative_xy) c_prop_visibility)
@@ -168,28 +160,56 @@ procedure( getPropertyRelativeXY(component property)
     relative_x = nth(0 prop_xy) - nth(0 comp_xy)
     relative_y = nth(1 prop_xy) - nth(1 comp_xy)
     relative_xy = (relative_x : relative_y)
+    printf("comp at %L, property %s at %L, relative %L\n" comp_xy cnGetPropName(property) prop_xy relative_xy)
+    relative_xy
   )
 )
 
-procedure( setPropertyRelativeXY(component property rel_xy)
+procedure( setPropertyVisAndXY(component property rel_xy visibility)
   ; set the position of the property to xy relative to the origin of the component it's attached to
   let(
     ( ; local variable declarations
       comp_xy prop_xy abs_x abs_y cmd_ret_obj cmd
     )
-    ; find the origin of the component
-    comp_xy = cnGetCompOriginXY(component)
-    ; use the component origin and the rel_xy to find new absolute coordinates for the property
-    abs_x = nth(0 comp_xy)+nth(0 rel_xy)
-    abs_y = nth(1 comp_xy) + nth(1 rel_xy)
+    p_rel_xy = getPropertyRelativeXY(component property)
 
-    ; find the location of the property so I send a 'select' command to DEHDL to add it to a group
-    prop_xy = cnCreatePointString(cnGetPropXY(property))
-    printf("comp_xy: %L  rel_xy: %L  prop_xy: %s  abs_xy: %L\n" comp_xy rel_xy prop_xy (abs_x:abs_y))
-    cmd = strcat("select Z properties " prop_xy " " prop_xy)
-    cnSendCommand(ImportHandle cmd ?runOptions verbose)
-    cmd = strcat("move Z " cnCreatePointString((abs_x:abs_y)))
-    cnSendCommand(ImportHandle cmd ?runOptions verbose)
+    unless( ((nth(0 p_rel_xy)==nth(0 rel_xy)) && (nth(1 p_rel_xy)==nth(1 rel_xy))) ; check if the property is already at the correct location
+      ; find the origin of the component
+      comp_xy = cnGetCompOriginXY(component)
+      ; use the component origin and the rel_xy to find new absolute coordinates for the property
+      ; find the location of the property so I send a 'select' command to DEHDL to add it to a group
+      prop_xy = cnCreatePointString(cnGetPropXY(property))
+
+      abs_x = nth(0 comp_xy)+nth(0 rel_xy)
+      abs_y = nth(1 comp_xy) + nth(1 rel_xy)
+
+      ; DEHDL command to add property to group so I can move the group (can't just move the property?)
+      cmd = strcat("select Z properties " prop_xy " " prop_xy)
+      cnSendCommand(ImportHandle cmd ?runOptions verbose)
+      ; move group command
+      cmd = strcat("move Z " cnCreatePointString((abs_x:abs_y)))
+      cnSendCommand(ImportHandle cmd ?runOptions verbose)
+    )
+
+    ; setting the property visibility to match that of the copied component
+    p_vis = cnGetPropVisibility(property)
+    unless( (p_vis==visibility); visibility already matches, don't need to do anything
+      cond(
+        (visibility==0 ; invisible
+          printf("visibility is 0. Shouldn't have been able to get here\n")
+        )
+        (visibility==1 ; value only
+          cnSendCommand(ImportHandle "display value Z" ?runOptions verbose)
+        )
+        (visibility==256 ; name only
+          cnSendCommand(ImportHandle "display name Z" ?runOptions verbose)
+        )
+        (visibility==257 ; name and value
+          cnSendCommand(ImportHandle "display both Z" ?runOptions verbose)
+        )
+        (t)
+      )
+    )
     t
   )
 )

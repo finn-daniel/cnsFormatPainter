@@ -171,11 +171,15 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
     ( ; local variable declarations
       comp_xy prop_xy abs_x abs_y cmd_ret_obj cmd
     )
-    p_rel_xy = getPropertyRelativeXY(component property)
 
-    unless( ((nth(0 p_rel_xy)==nth(0 rel_xy)) && (nth(1 p_rel_xy)==nth(1 rel_xy))) ; check if the property is already at the correct location
+    unless( ( ; start of big conditional
+        (cnGetPropName(property) == "$PN") || ; don't want to move pin numbers on top of each other
+        (nth(0 p_rel_xy)==nth(0 rel_xy)) && (nth(1 p_rel_xy)==nth(1 rel_xy)) ; prop is already at correct location
+      )
+      p_rel_xy = getPropertyRelativeXY(component property)
       ; find the origin of the component
       comp_xy = cnGetCompOriginXY(component)
+
       ; use the component origin and the rel_xy to find new absolute coordinates for the property
       ; find the location of the property so I send a 'select' command to DEHDL to add it to a group
       prop_xy = cnCreatePointString(cnGetPropXY(property))
@@ -187,6 +191,7 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
       cmd = strcat("select Z properties " prop_xy " " prop_xy)
       cnSendCommand(ImportHandle cmd ?runOptions verbose)
       ; move group command
+      printf("moving %s to %L\n" cnGetPropName(property) (abs_x:abs_y) )
       cmd = strcat("move Z " cnCreatePointString((abs_x:abs_y)))
       cnSendCommand(ImportHandle cmd ?runOptions verbose)
     )

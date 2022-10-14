@@ -32,18 +32,18 @@ procedure( getMouseButtonCallback( event coord )
   printf("Clicked coordinate: %L\n",coord)
 )
 
-procedure( formatPainter()
+procedure( getClickedComponent(prompt)
   let(
     ; local variable declarations
     (
+      mouse_coord
       cmd_ret_obj prm_obj_set comp_obj_set
       topLeft botRight
-      cmd
-      comp_obj comp_dbid comp_xy
+      cmd comp_obj
     )
 
     mouse_coord=nil
-    cnRequestMousePress(ImportHandle, `getMouseButtonCallback, `mouse_coord, "click on a component")
+    cnRequestMousePress(ImportHandle, `getMouseButtonCallback, `mouse_coord, prompt)
     ; wait for the callback to finish
     while((mouse_coord==nil)
       cnmpsSleep(ImportHandle 1)
@@ -55,35 +55,73 @@ procedure( formatPainter()
     topLeft = nth(0 mouse_coord)-100 : nth(1 mouse_coord)+100
     botRight = nth(0 mouse_coord)+100 : nth(1 mouse_coord)-100
     
-    ; dwgId=cnGetDwgId(cnFindActiveDwg(cnGetDwgInfo(ImportHandle)))
-    
     ; issue a "select" command in DEHDL. returns "bodies" within the bounding box.
     cmd = strcat("select A bodies " cnCreatePointString(topLeft) " " cnCreatePointString(botRight))
     cmd_ret_obj=cnSendCommand(ImportHandle cmd ?runOptions verbose)
 
-    ; test code: make sure something got returned
-    printf("command return object length: %d\n" length(cmd_ret_obj))
-    printf("%L\n" cmd_ret_obj)
-
     ; extract primitive object set from response
-    ; prm_obj_set=cnGetAddedObjectSet(cmd_ret_obj, dwgId)
     prm_obj_set=cnGetGroupedObjectSet(cmd_ret_obj)
-    printf("primitive object set length %d\n", length(prm_obj_set))
 
     ; get a list of properties from the primitive object set
     comp_obj_set=cnGetComps(prm_obj_set)
-    ; prop_obj_set=cnGetProps(prm_obj_set)
-    ; printf("property object set length %d\n", length(prop_obj_set))
-    printf("component object set length %d\n", length(comp_obj_set))
 
     ; hopefully there is only one component in the comp_obj_set, but maybe there will be more because
     ; of the size of the bounding box. I'll have to figure that out. TBD.
     comp_obj = nth(0 comp_obj_set)
+  )
+)
+
+procedure( getAttachedProperties( comp_dbid list_prop_objs )
+  ; input the database ID of the component and a list of properties to check ownership against
+  let(
+    (
+      list_attached_properties
+      prop_name prop_value prop_xy
+      relative_x relative_y relative_xy
+      prop_visibility
+    )
+
+    list_attached_properties = list()
+    foreach(prop_obj list_prop_objs
+      ; check if the property belongs to the component found earlier
+      if( (cnGetPropOwnerDbId(prop_obj) == comp_dbid)
+        then
+          list_attached_properties = cons(prop_obj list_attached_properties)
+          prop_name=cnGetPropName(prop_obj)
+          prop_value=cnGetPropValue(prop_obj)
+          prop_xy=cnGetPropXY(prop_obj)
+          ; get relative location
+          relative_x = nth(0 prop_xy) - nth(0 comp_xy) ; rel x
+          relative_y = nth(1 prop_xy) - nth(1 comp_xy) ; rel x
+          relative_xy = (relative_x : relative_y)
+          prop_visibility=cnGetPropVisibility(prop_obj)
+          if( (prop_value != nil) 
+            then
+              printf("Found property %s=%s attached to component at %s (visibility=%d)\n" prop_name prop_value cnCreatePointString(relative_xy) prop_visibility)
+            else
+              printf("Found property %s attached to component at %s (visibility=%d)\n" prop_name cnCreatePointString(relative_xy) prop_visibility)
+          )
+      )
+    )
+    list_attached_properties
+  )
+)
+
+procedure( formatPainter()
+  let(
+    ; local variable declarations
+    (
+      cmd_ret_obj prm_obj_set list_prop_objs
+      comp_obj comp_dbid comp_xy
+    )
+
+    comp_obj = getClickedComponent("click the component to copy")
     comp_dbid = cnGetCompDbId(comp_obj)
     comp_xy = cnGetCompOriginXY(comp_obj)
 
+    ; TODO:
     ; since i can't just get the properties attached to that component,
-    ; TODO: select all of the properties in the drawing and loop through each to check
+    ; select all of the properties in the drawing and loop through each to check
     ; if their owner is the above component.
     ; if the property is visible, save its relative XY location.
     ; selecting a different component, look for the same property name and set its visibility and
@@ -92,44 +130,9 @@ procedure( formatPainter()
     cmd_ret_obj=cnSendCommand(ImportHandle "select properties all" ?runOptions verbose)
     prm_obj_set=cnGetGroupedObjectSet(cmd_ret_obj)
     list_prop_objs=cnGetProps(prm_obj_set)
-    foreach(prop_obj list_prop_objs
-      ; check if the property belongs to the component found earlier
-      if( (cnGetPropOwnerDbId(prop_obj) == comp_dbid) then
-        prop_name=cnGetPropName(prop_obj)
-        prop_value=cnGetPropValue(prop_obj)
-        prop_xy=cnGetPropXY(prop_obj)
-        ; get relative location
-        relative_x = nth(0 prop_xy) - nth(0 comp_xy) ; rel x
-        relative_y = nth(1 prop_xy) - nth(1 comp_xy) ; rel x
-        relative_xy = (relative_x : relative_y)
-        prop_visibility=cnGetPropVisibility(prop_obj)
-        if( (prop_value != nil) 
-          then
-            printf("Found property %s=%s attached to component at %s (visibility=%d)\n" prop_name prop_value cnCreatePointString(relative_xy) prop_visibility)
-          else
-            printf("Found property %s attached to component at %s (visibility=%d)\n" prop_name cnCreatePointString(relative_xy) prop_visibility)
-        )
-      )
-    )
-    ; loop through each propery
-    ; foreach(property prop_obj_set
-    ;   ; check if the property's owner is a component
-    ;   if(cnGetPropOwnerType(property)==cnOWNER_COMP then
-    ;     ; extract name, value, owner 
-    ;     name=cnGetPropName(property)
-    ;     value=cnGetPropValue(property)
-    ;     owner_dbid=cnGetPropOwnerDbId(property)
-    ;     cmd=strcat("group " cnCreateDbIdString(owner_dbid))
-    ;     cmd_ret_obj=cnSendCommand(ImportHandle cmd ?runOptions verbose)
-    ;     groupName=cnGetGroupName(cmd_ret_obj)
-    ;     prm_obj_set=cnGetGroupedObjectSet(cmd_ret_obj)
-    ;     comp_obj=nth(0 cnGetComps(prm_obj_set))
-    ;     comp_name=cnGetCompName(comp_obj)
-    ;     comp_location=cnGetCompOriginXY(comp_obj)
-    ;     printf("%s %L %s %L\n" name value comp_name comp_location)
-    ;     cnSendCommand(ImportHandle strcat("exclude " groupName " " groupName))
-    ;   )
-    ; )
+
+    copy_props=getAttachedProperties(comp_dbid list_prop_objs)
+
   )
   t
 )

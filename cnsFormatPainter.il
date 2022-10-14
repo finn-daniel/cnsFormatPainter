@@ -161,16 +161,37 @@ procedure( formatPainter()
 
 procedure( getPropertyRelativeXY(component property)
   ; return x:y relative position of the property relative to the origin of the component it's attached to
-  comp_xy = cnGetCompOriginXY(component)
-  prop_xy = cnGetPropXY(property)
-  relative_x = nth(0 prop_xy) - nth(0 comp_xy)
-  relative_y = nth(1 prop_xy) - nth(1 comp_xy)
-  relative_xy = (relative_x : relative_y)
+  let(
+    (comp_xy prop_xy relative_x relative_y relative_xy) ; local variable declarations
+    comp_xy = cnGetCompOriginXY(component)
+    prop_xy = cnGetPropXY(property)
+    relative_x = nth(0 prop_xy) - nth(0 comp_xy)
+    relative_y = nth(1 prop_xy) - nth(1 comp_xy)
+    relative_xy = (relative_x : relative_y)
+  )
 )
 
-procedure( setPropertyRelativeXY(component property xy)
+procedure( setPropertyRelativeXY(component property rel_xy)
   ; set the position of the property to xy relative to the origin of the component it's attached to
-  t ; placeholder
+  let(
+    ( ; local variable declarations
+      comp_xy prop_xy abs_x abs_y cmd_ret_obj cmd
+    )
+    ; find the origin of the component
+    comp_xy = cnGetCompOriginXY(component)
+    ; use the component origin and the rel_xy to find new absolute coordinates for the property
+    abs_x = nth(0 comp_xy)+nth(0 rel_xy)
+    abs_y = nth(1 comp_xy) + nth(1 rel_xy)
+
+    ; find the location of the property so I send a 'select' command to DEHDL to add it to a group
+    prop_xy = cnCreatePointString(cnGetPropXY(property))
+    printf("comp_xy: %L  rel_xy: %L  prop_xy: %s  abs_xy: %L\n" comp_xy rel_xy prop_xy (abs_x:abs_y))
+    cmd = strcat("select Z properties " prop_xy " " prop_xy)
+    cnSendCommand(ImportHandle cmd ?runOptions verbose)
+    cmd = strcat("move Z " cnCreatePointString((abs_x:abs_y)))
+    cnSendCommand(ImportHandle cmd ?runOptions verbose)
+    t
+  )
 )
 
 procedure( formatPainterCallback()

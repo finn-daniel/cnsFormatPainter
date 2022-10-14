@@ -83,34 +83,17 @@ procedure( getAttachedProperties( component list_prop_objs )
   let(
     (
       list_attached_properties
-      comp_dbid comp_xy
-      prop_name prop_value prop_xy
+      comp_dbid 
       relative_x relative_y relative_xy
       prop_visibility
     )
 
     comp_dbid = cnGetCompDbId(component)
-    comp_xy = cnGetCompOriginXY(component)
     list_attached_properties = list()
     foreach(prop_obj list_prop_objs
       ; check if the property belongs to the component found earlier
-      if( (cnGetPropOwnerDbId(prop_obj) == comp_dbid)
-        then
-          list_attached_properties = cons(prop_obj list_attached_properties)
-          prop_name=cnGetPropName(prop_obj)
-          prop_value=cnGetPropValue(prop_obj)
-          prop_xy=cnGetPropXY(prop_obj)
-          ; get relative location
-          relative_x = nth(0 prop_xy) - nth(0 comp_xy) ; rel x
-          relative_y = nth(1 prop_xy) - nth(1 comp_xy) ; rel x
-          relative_xy = (relative_x : relative_y)
-          prop_visibility=cnGetPropVisibility(prop_obj)
-          if( (prop_value != nil) 
-            then
-              printf("Found property %s=%s attached to component at %s (visibility=%d)\n" prop_name prop_value cnCreatePointString(relative_xy) prop_visibility)
-            else
-              printf("Found property %s attached to component at %s (visibility=%d)\n" prop_name cnCreatePointString(relative_xy) prop_visibility)
-          )
+      if( (cnGetPropOwnerDbId(prop_obj) == comp_dbid) then
+        list_attached_properties = cons(prop_obj list_attached_properties)
       )
     )
     list_attached_properties
@@ -122,7 +105,8 @@ procedure( formatPainter()
     ; local variable declarations
     (
       cmd_ret_obj prm_obj_set list_prop_objs
-      copy_component
+      copy_component copy_comp_xy
+      prop_name prop_value prop_xy
     )
 
     copy_component = getClickedComponent("click the component to copy\n")
@@ -142,12 +126,51 @@ procedure( formatPainter()
     list_prop_objs = cnGetProps(prm_obj_set) ; this list contains all of the properties on the drawing, if I'm not mistaken
 
     copy_props = getAttachedProperties(copy_component list_prop_objs) ; the properties attached to copy_component
+    copy_comp_xy = cnGetCompOriginXY(copy_component)
+
 
     paste_component = getClickedComponent("click the component to paste\n")
-    paste_props = getAttachedProperties(paste_component list_prop_objs)
+    paste_props = getAttachedProperties(paste_component list_prop_objs) ; the properties attached to paste_component
+    ; we'll go through and match the property visibility
 
+    foreach( c_prop copy_props
+      c_prop_visibility=cnGetPropVisibility(c_prop)
+      unless( (c_prop_visibility == 0) ; if the property is invisible, we don't do anything
+        c_prop_name=cnGetPropName(c_prop)
+        ; check if that property name shows up in paste_props
+        foreach( p_prop paste_props
+          p_prop_name=cnGetPropName(p_prop)
+          if( (p_prop_name == c_prop_name) then
+            ; found a matching property
+            c_prop_value=cnGetPropValue(c_prop)
+            c_relative_xy = getPropertyRelativeXY(copy_component c_prop)
+            setPropertyRelativeXY(paste_component p_prop c_relative_xy)
+            if( (prop_value != nil) 
+              then
+                printf("Found property %s=%s attached to component at %s (visibility=%d)\n" c_prop_name c_prop_value cnCreatePointString(c_relative_xy) c_prop_visibility)
+              else
+                printf("Found property %s attached to component at %s (visibility=%d)\n" c_prop_name cnCreatePointString(c_relative_xy) c_prop_visibility)
+            )
+          )
+        )
+      )
+    )
   )
   t
+)
+
+procedure( getPropertyRelativeXY(component property)
+  ; return x:y relative position of the property relative to the origin of the component it's attached to
+  comp_xy = cnGetCompOriginXY(component)
+  prop_xy = cnGetPropXY(property)
+  relative_x = nth(0 prop_xy) - nth(0 comp_xy)
+  relative_y = nth(1 prop_xy) - nth(1 comp_xy)
+  relative_xy = (relative_x : relative_y)
+)
+
+procedure( setPropertyRelativeXY(component property xy)
+  ; set the position of the property to xy relative to the origin of the component it's attached to
+  t ; placeholder
 )
 
 procedure( formatPainterCallback()

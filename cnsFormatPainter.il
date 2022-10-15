@@ -4,10 +4,10 @@
 ; a cmd window opens. type 'start cnskill -i -nongraph'
 ; the skill console opens. close the cmd window from the previous step to give control back to DEHDL.
 ; use load("cnsFormatPainter.il") to load this file
-; use 'ImportHandle=cnmpsImport()', gets a handle to the running DEHDL instance.
-; pass the handle to the procedures that use a DEHDL handle
+; use 'ImportHandle=cnmpsImport()', gets a ImportHandle to the running DEHDL instance.
+; pass the ImportHandle to the procedures that use a DEHDL ImportHandle
 
-ImportHandle=cnmpsImport()
+; ImportHandle=cnmpsImport()
 
 ;;----------------------------------------------------------------
 ;; Terminate when concept exit is detected
@@ -72,16 +72,18 @@ procedure( getClickedComponent(prompt)
     ; )
 
     mouse_coord=nil
+    printf("start of getClickedComponent()\n")
     cnRequestMousePress(ImportHandle, `getMouseButtonCallback, `mouse_coord, prompt)
     ; wait for the callback to finish
     while((mouse_coord==nil)
       cnmpsSleep(ImportHandle 1)
       ; TODO: debug me -- sometimes the callback doesn't get called after an event, and I get stuck here
+      ; seems like if you do a mouse drag it gets off in the weeds.
     )
     unless(stringp(userInput) ; check for string response type (user pressed a key to cancel
 
       ; mouse_coord = userInput
-      ; I can't seem to figure out how to get a handle to a component object, other than trying to select
+      ; I can't seem to figure out how to get a ImportHandle to a component object, other than trying to select
       ; whatever component is close to the cursor when the mouse button was clicked.
       ; create a 200x200 bounding box to find components within. TODO: figure out how small I can make this
       topLeft = nth(0 mouse_coord)-100 : nth(1 mouse_coord)+100
@@ -146,11 +148,12 @@ procedure( formatPainter()
       prop_name prop_value prop_xy
     )
 
+    printf("started formatPainter function\n")
     copy_component = getClickedComponent("click the component to copy\n")
 
     unless( (copy_component==nil)
 
-      cmd_ret_obj = cnSendCommand(ImportHandle "select properties all" ?runOptions verbose)
+      cmd_ret_obj = cnSendCommand(ImportHandle "select B properties all" ?runOptions verbose)
       prm_obj_set = cnGetGroupedObjectSet(cmd_ret_obj)
       list_prop_objs = cnGetProps(prm_obj_set) ; this list contains all of the properties on the drawing
 
@@ -170,7 +173,7 @@ procedure( formatPainter()
 
             foreach( c_prop copy_props
               c_prop_visibility=cnGetPropVisibility(c_prop)
-              unless( (c_prop_visibility == 0) ; if the property is invisible, we don't do anything
+              unless( (c_prop_visibility == 0) ; if the property is invisible, we don't do anything TODO: what if the property is visible on paste object?
                 c_prop_name=cnGetPropName(c_prop)
                 ; check if that property name shows up in paste_props
                 foreach( p_prop paste_props
@@ -179,7 +182,7 @@ procedure( formatPainter()
                     ; found a matching property
                     c_prop_value=cnGetPropValue(c_prop)
                     c_relative_xy = getPropertyRelativeXY(copy_component c_prop)
-                    setPropertyVisAndXY(paste_component p_prop c_relative_xy c_prop_visibility)
+                    setPropertyVisAndXY(ImportHandle paste_component p_prop c_relative_xy c_prop_visibility)
                     if( (prop_value != nil)
                       then
                         printf("Found property %s=%s attached to component at %s (visibility=%d)\n" c_prop_name c_prop_value cnCreatePointString(c_relative_xy) c_prop_visibility)
@@ -192,13 +195,14 @@ procedure( formatPainter()
             )
         )
       )
+      ; exit paste loop
+      cnSendCommand(ImportHandle "exclude B properties" ?runOptions verbose) ; release B group
     )
   )
   t
 )
 ; TODO: remove print statements
 ; TODO: delete the group that has all the properties in it
-; TODO: create an option to continue pasting until ESC key hit or click away from component
 ; TODO: check if component types are the same before pasting. E.g. only paste from R to R, C to C, etc. (use refdes?)
 
 procedure( getPropertyRelativeXY(component property)
@@ -273,19 +277,13 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
   )
 )
 
-procedure( formatPainterCallback()
+procedure( formatPainterCallback(event usrarg)
+  printf("test callback\n")
   eventtype=cnGetEventType(event)
   cond(
-    (eventtype==cnTEXTINPUT_EVENT
-      printf("text input event\n")
-      file_name=cnGetStringText(event)
-      printf("filename: %s\n" file_name)
-      brd_in(file_name ImportHandle)
-    )
     (eventtype==cnSTART_EVENT
       printf("start event\n")
-      cnSendCommand(ImportHandle "echo click on a component" ?runOptions verbose)
-      file_name=nil
+      formatPainter() ; TODO: why doesn't this work?
     )
     (eventtype==cnEND_EVENT
       printf("end event\n")
@@ -299,14 +297,14 @@ procedure( cnCommands_formatPainterServer()
   list(
     list("formatPainter",
       list(
-        list(cnSTART_EVENT, cnEND_EVENT, cnTEXTINPUT_EVENT)
+        list(cnSTART_EVENT, cnEND_EVENT)
         'formatPainterCallback
       )
     )
   )
 )
 
-AppServiceName	  = "cnsFormatPainterServer"
+AppServiceName	  = "formatPainterServer"
 AppServiceVersion = "1.0"
 AppToolName	  = AppServiceName
 
@@ -322,18 +320,20 @@ ExportHandle = mpsExport(
   ?session cnmpsGetDefaultSessionName()
 )
 
-
 ;; Give Concept a moment to import the service we just exported,
 ;; before we attempt to import the Concept service.
 mpsSleep( ExportHandle, 2 )
 unless( cnmpsIsExported()		;; take a nap if concept is still busy
     mpsSleep( ExportHandle, 5 )
 )
+printf("test: ExportHandle exported\n")
+
 ImportHandle = cnmpsImport()
 unless( ImportHandle
     printf( "Could not import Concept mps Service\n" )
     exit( 1 )
 )
+printf("test: ImportHandle imported\n")
 
 ;; arrange to be notified when Concept exits
 ImportHandle->exitHandler = 'ConceptExitHandler

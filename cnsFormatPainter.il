@@ -187,13 +187,11 @@ procedure( formatPainter()
       prop_name prop_value prop_xy
     )
 
-    printf("started formatPainter function\n")
     copy_component = getClickedComponent("click the component to copy\n")
 
     unless( (copy_component==nil)
 
       cmd_ret_obj = cnSendCommand(ImportHandle "select B properties all" ?runOptions verbose)
-      printf("test <select B properties all> command: cmd_ret_object length: %d\n" length(cmd_ret_obj))
       prm_obj_set = cnGetGroupedObjectSet(cmd_ret_obj)
       list_prop_objs = cnGetProps(prm_obj_set) ; this list contains all of the properties on the drawing
 
@@ -208,7 +206,6 @@ procedure( formatPainter()
           then
             continue_paste_loop = nil
           else
-            printf("test paste loop\n")
             paste_props = getAttachedProperties(paste_component list_prop_objs) ; the properties attached to paste_component
             ; we'll go through and match the property visibility
 
@@ -245,38 +242,14 @@ procedure( formatPainter()
 
 procedure( formatPainterCallback(event usrarg)
   eventtype=cnGetEventType(event)
-  ; printf("%s\n" ImportHandle)
-  ; printf("test callback: eventtype=%d\n" eventtype)
   cond(
-    (eventtype==cnTEXTINPUT_EVENT 
-      printf("text input event\n")
-    )
-    ; (eventtype==cnABORT_EVENT 
-    ;   printf("abort event\n")
-    ; )
-    ; (eventtype==cnACTIVATE_EVENT 
-    ;   printf("activate event\n")
-    ; )
-    (eventtype==cnENDOFLINE_EVENT
-      printf("end of line event\n")
-    )
     (eventtype==cnSTART_EVENT
-      printf("start event\n")
-      cnSendCommand(ImportHandle "click the component to copy from" ?runOptions verbose)
-      formatPainter() ;
+      formatPainter()
     )
-    ; (eventtype==cnMOUSEPRESS_EVENT
-    ;   xy = cnGetMouseXY(event)
-    ;   usrarg = set(usrarg xy)
-    ;   printf("Clicked coordinate: %L\n",usrarg)
-    ; )
     (eventtype==cnEND_EVENT
-      printf("end event\n")
-      cnSendCommand(ImportHandle "echo Have a nice day" ?runOptions verbose)
+      cnSendCommand(ImportHandle "echo Have a nice day;" ?runOptions silent)
     )
-    (t 
-      printf("no event?\n")
-    )
+    (t)
   )
 )
 
@@ -285,13 +258,8 @@ procedure( cnCommands_formatPainterServer()
     list("formatPainter",
       list(
         list(
-          cnTEXTINPUT_EVENT,
-          ; cnMOUSEPRESS_EVENT,
           cnSTART_EVENT,
-          cnEND_EVENT,
-          ; cnABORT_EVENT,
-          ; cnACTIVATE_EVENT,
-          cnENDOFLINE_EVENT
+          cnEND_EVENT
         )
         'formatPainterCallback
       )

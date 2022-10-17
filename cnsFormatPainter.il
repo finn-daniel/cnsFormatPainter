@@ -21,29 +21,6 @@ procedure( ConceptExitHandler( Handle )
 silent=cnSetRunOptions(?result cnOUT_SILENT ?display cnOUT_SILENT)
 verbose=cnSetRunOptions(?result cnOUT_VERBOSE ?display cnOUT_VERBOSE)
 
-
-; figure out which component the user is closest to the cursor when the button was clicked,
-; since there doesn't seem to be a simpler way to get info about the selected object.
-; procedure( getUserInputCallback( event userInput )
-;   eventType=cnGetEventType(event)
-;   print("test: eventType=%d\n" eventType)
-;   cond(
-;     (eventType==cnTEXTINPUT_EVENT
-;       str = cnGetStringText(event)
-;       print("test -- got string %s\n" str)
-;       ; if( (str==intToChar(27)) then ; ESCAPE
-;       ;   printf("escape character detected\n")
-;       ; )
-;       userInput = set(userInput str)
-;     )
-;     (eventType==cnMOUSEPRESS_EVENT
-;       xy = cnGetMouseXY(event)
-;       userInput = set(userInput xy)
-;       printf("Clicked coordinate: %L\n",userInput)
-;     )
-;   )
-; )
-
 procedure( getMouseButtonCallback( event coord ) 
   ; TODO: do I need to check which mouse button was pressed?
   xy = cnGetMouseXY(event)
@@ -61,18 +38,7 @@ procedure( getClickedComponent(prompt)
       cmd comp_obj
     )
 
-    userInput=nil
-    ; cnRequestUserInput(ImportHandle, `getUserInputCallback, `userInput, prompt, list(cnTEXTINPUT_EVENT cnMOUSEPRESS_EVENT))
-    ; count=0
-    ; while((userInput==nil)
-    ;   cnmpsSleep(ImportHandle 1)
-    ;   printf("test: %d\n" count)
-    ;   count = count+1
-    ;   ; TODO: debug me - sometimes I get stuck here
-    ; )
-
     mouse_coord=nil
-    printf("start of getClickedComponent()\n")
     cnRequestMousePress(ImportHandle, `getMouseButtonCallback, `mouse_coord, prompt)
     ; wait for the callback to finish
     while((mouse_coord==nil)
@@ -80,39 +46,36 @@ procedure( getClickedComponent(prompt)
       ; TODO: debug me -- sometimes the callback doesn't get called after an event, and I get stuck here
       ; seems like if you do a mouse drag it gets off in the weeds.
     )
-    unless(stringp(userInput) ; check for string response type (user pressed a key to cancel
 
-      ; mouse_coord = userInput
-      ; I can't seem to figure out how to get a ImportHandle to a component object, other than trying to select
-      ; whatever component is close to the cursor when the mouse button was clicked.
-      ; create a 200x200 bounding box to find components within. TODO: figure out how small I can make this
-      topLeft = nth(0 mouse_coord)-100 : nth(1 mouse_coord)+100
-      botRight = nth(0 mouse_coord)+100 : nth(1 mouse_coord)-100
+    ; I can't seem to figure out how to get a ImportHandle to a component object, other than trying to select
+    ; whatever component is close to the cursor when the mouse button was clicked.
+    ; create a 200x200 bounding box to find components within. TODO: figure out how small I can make this
+    topLeft = nth(0 mouse_coord)-100 : nth(1 mouse_coord)+100
+    botRight = nth(0 mouse_coord)+100 : nth(1 mouse_coord)-100
 
-      ; issue a "select" command in DEHDL. returns "bodies" within the bounding box.
-      cmd = strcat("select A bodies " cnCreatePointString(topLeft) " " cnCreatePointString(botRight))
-      cmd_ret_obj=cnSendCommand(ImportHandle cmd ?runOptions verbose)
+    ; issue a "select" command in DEHDL. returns "bodies" within the bounding box.
+    cmd = strcat("select A bodies " cnCreatePointString(topLeft) " " cnCreatePointString(botRight))
+    cmd_ret_obj=cnSendCommand(ImportHandle cmd ?runOptions verbose)
 
-      ; extract primitive object set from response
-      prm_obj_set=cnGetGroupedObjectSet(cmd_ret_obj)
+    ; extract primitive object set from response
+    prm_obj_set=cnGetGroupedObjectSet(cmd_ret_obj)
 
-      ; get a list of properties from the primitive object set
-      comp_obj_set=cnGetComps(prm_obj_set)
+    ; get a list of properties from the primitive object set
+    comp_obj_set=cnGetComps(prm_obj_set)
 
-      ; hopefully there is only one component in the comp_obj_set, but maybe there will be more because
-      ; of the size of the bounding box. I'll have to figure that out. TBD.
-      if( (length(comp_obj_set) == 1)
+    ; hopefully there is only one component in the comp_obj_set, but maybe there will be more because
+    ; of the size of the bounding box. I'll have to figure that out. TBD.
+    if( (length(comp_obj_set) == 1)
+      then
+        comp_obj = nth(0 comp_obj_set)
+      else
+        if( (length(comp_obj_set) > 1)
         then
-          comp_obj = nth(0 comp_obj_set)
+          printf("catch error case: more than one object found within bounding box\n")
         else
-          if( (length(comp_obj_set) > 1)
-          then
-            printf("catch error case: more than one object found within bounding box\n")
-          else
-            printf("no objects found near cursor\n")
-          )
-          comp_obj = nil
-      )
+          printf("no objects found near cursor\n")
+        )
+        comp_obj = nil
     )
   )
 )
@@ -139,68 +102,6 @@ procedure( getAttachedProperties( component list_prop_objs )
   )
 )
 
-procedure( formatPainter()
-  let(
-    ; local variable declarations
-    (
-      cmd_ret_obj prm_obj_set list_prop_objs
-      copy_component copy_comp_xy
-      prop_name prop_value prop_xy
-    )
-
-    printf("started formatPainter function\n")
-    copy_component = getClickedComponent("click the component to copy\n")
-
-    unless( (copy_component==nil)
-
-      cmd_ret_obj = cnSendCommand(ImportHandle "select B properties all" ?runOptions verbose)
-      prm_obj_set = cnGetGroupedObjectSet(cmd_ret_obj)
-      list_prop_objs = cnGetProps(prm_obj_set) ; this list contains all of the properties on the drawing
-
-      copy_props = getAttachedProperties(copy_component list_prop_objs) ; the properties attached to copy_component
-      copy_comp_xy = cnGetCompOriginXY(copy_component)
-
-      continue_paste_loop = t
-      while( (continue_paste_loop==t)
-
-        paste_component = getClickedComponent("click the component to paste\n")
-        if( (paste_component == nil)
-          then
-            continue_paste_loop = nil
-          else
-            paste_props = getAttachedProperties(paste_component list_prop_objs) ; the properties attached to paste_component
-            ; we'll go through and match the property visibility
-
-            foreach( c_prop copy_props
-              c_prop_visibility=cnGetPropVisibility(c_prop)
-              unless( (c_prop_visibility == 0) ; if the property is invisible, we don't do anything TODO: what if the property is visible on paste object?
-                c_prop_name=cnGetPropName(c_prop)
-                ; check if that property name shows up in paste_props
-                foreach( p_prop paste_props
-                  p_prop_name=cnGetPropName(p_prop)
-                  if( (p_prop_name == c_prop_name) then
-                    ; found a matching property
-                    c_prop_value=cnGetPropValue(c_prop)
-                    c_relative_xy = getPropertyRelativeXY(copy_component c_prop)
-                    setPropertyVisAndXY(ImportHandle paste_component p_prop c_relative_xy c_prop_visibility)
-                    if( (prop_value != nil)
-                      then
-                        printf("Found property %s=%s attached to component at %s (visibility=%d)\n" c_prop_name c_prop_value cnCreatePointString(c_relative_xy) c_prop_visibility)
-                      else
-                        printf("Found property %s attached to component at %s (visibility=%d)\n" c_prop_name cnCreatePointString(c_relative_xy) c_prop_visibility)
-                    )
-                  )
-                )
-              )
-            )
-        )
-      )
-      ; exit paste loop
-      cnSendCommand(ImportHandle "exclude B properties" ?runOptions verbose) ; release B group
-    )
-  )
-  t
-)
 ; TODO: remove print statements
 ; TODO: delete the group that has all the properties in it
 ; TODO: check if component types are the same before pasting. E.g. only paste from R to R, C to C, etc. (use refdes?)
@@ -277,19 +178,105 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
   )
 )
 
+procedure( formatPainter()
+  let(
+    ; local variable declarations
+    (
+      cmd_ret_obj prm_obj_set list_prop_objs
+      copy_component copy_comp_xy
+      prop_name prop_value prop_xy
+    )
+
+    printf("started formatPainter function\n")
+    copy_component = getClickedComponent("click the component to copy\n")
+
+    unless( (copy_component==nil)
+
+      cmd_ret_obj = cnSendCommand(ImportHandle "select B properties all" ?runOptions verbose)
+      printf("test <select B properties all> command: cmd_ret_object length: %d\n" length(cmd_ret_obj))
+      prm_obj_set = cnGetGroupedObjectSet(cmd_ret_obj)
+      list_prop_objs = cnGetProps(prm_obj_set) ; this list contains all of the properties on the drawing
+
+      copy_props = getAttachedProperties(copy_component list_prop_objs) ; the properties attached to copy_component
+      ; copy_comp_xy = cnGetCompOriginXY(copy_component)
+
+      continue_paste_loop = t
+      while( (continue_paste_loop==t)
+
+        paste_component = getClickedComponent("click the component to paste\n")
+        if( (paste_component == nil)
+          then
+            continue_paste_loop = nil
+          else
+            printf("test paste loop\n")
+            paste_props = getAttachedProperties(paste_component list_prop_objs) ; the properties attached to paste_component
+            ; we'll go through and match the property visibility
+
+            foreach( c_prop copy_props
+              c_prop_visibility=cnGetPropVisibility(c_prop)
+              unless( (c_prop_visibility == 0) ; if the property is invisible, we don't do anything TODO: what if the property is visible on paste object?
+                c_prop_name=cnGetPropName(c_prop)
+                ; check if that property name shows up in paste_props
+                foreach( p_prop paste_props
+                  p_prop_name=cnGetPropName(p_prop)
+                  if( (p_prop_name == c_prop_name) then
+                    ; found a matching property
+                    c_prop_value=cnGetPropValue(c_prop)
+                    c_relative_xy = getPropertyRelativeXY(copy_component c_prop)
+                    setPropertyVisAndXY(paste_component p_prop c_relative_xy c_prop_visibility)
+                    if( (prop_value != nil)
+                      then
+                        printf("Found property %s=%s attached to component at %s (visibility=%d)\n" c_prop_name c_prop_value cnCreatePointString(c_relative_xy) c_prop_visibility)
+                      else
+                        printf("Found property %s attached to component at %s (visibility=%d)\n" c_prop_name cnCreatePointString(c_relative_xy) c_prop_visibility)
+                    )
+                  )
+                )
+              )
+            )
+        )
+      )
+      ; exit paste loop
+      cnSendCommand(ImportHandle "exclude B properties;" ?runOptions verbose) ; release B group
+    )
+  )
+  t
+)
+
 procedure( formatPainterCallback(event usrarg)
-  printf("test callback\n")
   eventtype=cnGetEventType(event)
+  ; printf("%s\n" ImportHandle)
+  ; printf("test callback: eventtype=%d\n" eventtype)
   cond(
+    (eventtype==cnTEXTINPUT_EVENT 
+      printf("text input event\n")
+    )
+    ; (eventtype==cnABORT_EVENT 
+    ;   printf("abort event\n")
+    ; )
+    ; (eventtype==cnACTIVATE_EVENT 
+    ;   printf("activate event\n")
+    ; )
+    (eventtype==cnENDOFLINE_EVENT
+      printf("end of line event\n")
+    )
     (eventtype==cnSTART_EVENT
       printf("start event\n")
-      formatPainter() ; TODO: why doesn't this work?
+      cnSendCommand(ImportHandle "click the component to copy from" ?runOptions verbose)
+      formatPainter() ;
     )
+    ; (eventtype==cnMOUSEPRESS_EVENT
+    ;   xy = cnGetMouseXY(event)
+    ;   usrarg = set(usrarg xy)
+    ;   printf("Clicked coordinate: %L\n",usrarg)
+    ; )
     (eventtype==cnEND_EVENT
       printf("end event\n")
       cnSendCommand(ImportHandle "echo Have a nice day" ?runOptions verbose)
     )
-    (t)
+    (t 
+      printf("no event?\n")
+    )
   )
 )
 
@@ -297,17 +284,36 @@ procedure( cnCommands_formatPainterServer()
   list(
     list("formatPainter",
       list(
-        list(cnSTART_EVENT, cnEND_EVENT)
+        list(
+          cnTEXTINPUT_EVENT,
+          ; cnMOUSEPRESS_EVENT,
+          cnSTART_EVENT,
+          cnEND_EVENT,
+          ; cnABORT_EVENT,
+          ; cnACTIVATE_EVENT,
+          cnENDOFLINE_EVENT
+        )
         'formatPainterCallback
       )
     )
   )
 )
 
+;;----------------------------------------------------------------
+;;
+;; Main
+;;
+;;----------------------------------------------------------------
+
+ImportHandle = cnmpsImport()
+unless( ImportHandle
+    printf( "Could not import Concept mps Service\n" )
+    exit( 1 )
+)
+
 AppServiceName	  = "formatPainterServer"
 AppServiceVersion = "1.0"
 AppToolName	  = AppServiceName
-
 
 ;; Export service into the same session which Concept Exports into.
 ;;   Alternatively, a different session can be specified here AND to
@@ -326,14 +332,6 @@ mpsSleep( ExportHandle, 2 )
 unless( cnmpsIsExported()		;; take a nap if concept is still busy
     mpsSleep( ExportHandle, 5 )
 )
-printf("test: ExportHandle exported\n")
-
-ImportHandle = cnmpsImport()
-unless( ImportHandle
-    printf( "Could not import Concept mps Service\n" )
-    exit( 1 )
-)
-printf("test: ImportHandle imported\n")
 
 ;; arrange to be notified when Concept exits
 ImportHandle->exitHandler = 'ConceptExitHandler

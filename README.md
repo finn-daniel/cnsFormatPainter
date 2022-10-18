@@ -49,3 +49,9 @@ The intention behind this script is to create an easy way to display component p
 2. Click a component to compy from
 
 3. Click a component to paste visibility to. Continue clicking components until you're done. Click away from any component to finish.
+
+## Issues
+
+1. The formatPainter command can be ended without being notified, basically it gets the rug pulled out from under it. Doing a mouse drag or an "undo" will cause it to get stuck in a loop waiting for user input with no way out. Kill the Skill interpreter and rerun the command.
+
+2. Cadence gives you inconsisent relative property locations. Sometimes the property location is defined by its bottom left corner, sometimes it's the right, sometimes it's the middle. I need to find a way to determine what the "origin" of the property is defined by, otherwise there's no way I can make them match.

@@ -101,20 +101,32 @@ procedure( getAttachedProperties( component list_prop_objs )
   )
 )
 
-; TODO: remove print statements
-; TODO: delete the group that has all the properties in it
 ; TODO: check if component types are the same before pasting. E.g. only paste from R to R, C to C, etc. (use refdes?)
+; TODO: copy justification
 
 procedure( getPropertyRelativeXY(component property)
-  ; return x:y relative position of the property relative to the origin of the component it's attached to
   let(
-    (comp_xy prop_xy relative_x relative_y relative_xy) ; local variable declarations
+    (comp_xy prop_xy relative_x relative_y relative_xy
+      prop_just just
+    ) ; local variable declarations
     comp_xy = cnGetCompOriginXY(component)
     prop_xy = cnGetPropXY(property)
     relative_x = nth(0 prop_xy) - nth(0 comp_xy)
     relative_y = nth(1 prop_xy) - nth(1 comp_xy)
     relative_xy = (relative_x : relative_y)
-    printf("comp at %L, property %s at %L, relative %L\n" comp_xy cnGetPropName(property) prop_xy relative_xy)
+    prop_just = cnGetPropJustification(property)
+    cond(
+      (prop_just==cnJUSTIF_LEFT
+        just = "left"
+      )
+      (prop_just==cnJUSTIF_CENTER
+        just = "center"
+      )
+      (prop_just==cnJUSTIF_RIGHT
+        just = "right"
+      )
+    )
+    printf("comp at %L, property %s at %L, relative %L, justification=%s\n" comp_xy cnGetPropName(property) prop_xy relative_xy just)
     relative_xy
   )
 )

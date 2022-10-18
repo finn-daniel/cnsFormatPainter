@@ -22,7 +22,6 @@ silent=cnSetRunOptions(?result cnOUT_SILENT ?display cnOUT_SILENT)
 verbose=cnSetRunOptions(?result cnOUT_VERBOSE ?display cnOUT_VERBOSE)
 
 procedure( getMouseButtonCallback( event coord ) 
-  ; TODO: do I need to check which mouse button was pressed?
   xy = cnGetMouseXY(event)
   coord = set(coord xy)
   printf("Clicked coordinate: %L\n",coord)
@@ -146,11 +145,12 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
         abs_y = nth(1 comp_xy) + nth(1 rel_xy)
 
         ; DEHDL command to add property to group so I can move the group (can't just move the property?)
-        cmd = strcat("select Z properties " prop_xy " " prop_xy)
-        cnSendCommand(ImportHandle cmd ?runOptions verbose)
-        ; move group command
+        ; cmd = strcat("select Z properties " prop_xy " " prop_xy)
+        ; cnSendCommand(ImportHandle cmd ?runOptions verbose)
+        ; ; move group command
         printf("moving %s to %L\n" cnGetPropName(property) (abs_x:abs_y) )
-        cmd = strcat("move Z " cnCreatePointString((abs_x:abs_y)))
+        ; cmd = strcat("move Z " cnCreatePointString((abs_x:abs_y)))
+        cmd = strcat("move " prop_xy " " cnCreatePointString((abs_x:abs_y)))
         cnSendCommand(ImportHandle cmd ?runOptions verbose)
       )
     )
@@ -221,21 +221,15 @@ procedure( formatPainter()
                     c_prop_value=cnGetPropValue(c_prop)
                     c_relative_xy = getPropertyRelativeXY(copy_component c_prop)
                     setPropertyVisAndXY(paste_component p_prop c_relative_xy c_prop_visibility)
-                    if( (prop_value != nil)
-                      then
-                        printf("Found property %s=%s attached to component at %s (visibility=%d)\n" c_prop_name c_prop_value cnCreatePointString(c_relative_xy) c_prop_visibility)
-                      else
-                        printf("Found property %s attached to component at %s (visibility=%d)\n" c_prop_name cnCreatePointString(c_relative_xy) c_prop_visibility)
-                    )
                   )
                 )
               )
             )
         )
       )
-      ; exit paste loop
-      cnSendCommand(ImportHandle "exclude B properties;" ?runOptions verbose) ; release B group
     )
+    ; exit paste loop
+    cnSendCommand(ImportHandle "exclude B properties;" ?runOptions verbose) ; release B group
   )
   t
 )
@@ -243,6 +237,9 @@ procedure( formatPainter()
 procedure( formatPainterCallback(event usrarg)
   eventtype=cnGetEventType(event)
   cond(
+    (eventtype==cnABORT_EVENT
+      printf("received ABORT event\n") ; debug mouse drag hang
+    )
     (eventtype==cnSTART_EVENT
       formatPainter()
     )
@@ -250,6 +247,7 @@ procedure( formatPainterCallback(event usrarg)
       cnSendCommand(ImportHandle "echo Have a nice day;" ?runOptions silent)
     )
     (t)
+    ; TODO: need to figure out when the command was cancelled because i keep getting stuck
   )
 )
 
@@ -258,6 +256,7 @@ procedure( cnCommands_formatPainterServer()
     list("formatPainter",
       list(
         list(
+          cnABORT_EVENT,
           cnSTART_EVENT,
           cnEND_EVENT
         )

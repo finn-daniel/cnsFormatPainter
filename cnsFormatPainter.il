@@ -44,6 +44,10 @@ procedure( getClickedComponent(prompt)
       cnmpsSleep(ImportHandle 1)
       ; TODO: debug me -- sometimes the callback doesn't get called after an event, and I get stuck here
       ; seems like if you do a mouse drag it gets off in the weeds.
+      ; TODO: can I check if the application is still in formatPainter command mode while I'm stuck in this loop?
+      ; if((cnGetSetupPreselectMode())
+      ;   printf("DEHDL is in preselect mode\n")
+      ; )
     )
 
     ; I can't seem to figure out how to get a ImportHandle to a component object, other than trying to select
@@ -108,6 +112,7 @@ procedure( getPropertyRelativeXY(component property)
   let(
     (comp_xy prop_xy relative_x relative_y relative_xy
       prop_just just
+      rem_x rem_y
     ) ; local variable declarations
     comp_xy = cnGetCompOriginXY(component)
     prop_xy = cnGetPropXY(property)
@@ -127,6 +132,27 @@ procedure( getPropertyRelativeXY(component property)
       )
     )
     printf("comp at %L, property %s at %L, relative %L, justification=%s\n" comp_xy cnGetPropName(property) prop_xy relative_xy just)
+    ; rounding to fit grid
+    rem_x = remainder(relative_x 50) ; if x is on the grid, remainder should be 0
+    if( (rem_x != 0)
+      if( (rem_x <= 25) 
+        then ; round down
+          relative_x = relative_x - rem_x
+        else ; round up
+          relative_x = relative_x + rem_x
+      )
+    )
+    rem_y = remainder(relative_y 50) ; if y is on the grid, remainder should be 0
+    if( (rem_y != 0)
+      if( (rem_y <= 25) 
+        then ; round down
+          relative_y = relative_y - rem_y
+        else ; round up
+          relative_y = relative_y + rem_y
+      )
+    )
+    relative_xy = (relative_x : relative_y)
+    printf("relative xy after rounding: %L\n" relative_xy)
     relative_xy
   )
 )
@@ -157,12 +183,12 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
         abs_y = nth(1 comp_xy) + nth(1 rel_xy)
 
         ; DEHDL command to add property to group so I can move the group (can't just move the property?)
-        ; cmd = strcat("select Z properties " prop_xy " " prop_xy)
-        ; cnSendCommand(ImportHandle cmd ?runOptions verbose)
+        cmd = strcat("select Z properties " prop_xy " " prop_xy)
+        cnSendCommand(ImportHandle cmd ?runOptions verbose)
         ; ; move group command
         printf("moving %s to %L\n" cnGetPropName(property) (abs_x:abs_y) )
-        ; cmd = strcat("move Z " cnCreatePointString((abs_x:abs_y)))
-        cmd = strcat("move " prop_xy " " cnCreatePointString((abs_x:abs_y)))
+        cmd = strcat("move Z " cnCreatePointString((abs_x:abs_y)))
+        ; cmd = strcat("move " prop_xy " " cnCreatePointString((abs_x:abs_y)))
         cnSendCommand(ImportHandle cmd ?runOptions verbose)
       )
     )
@@ -256,7 +282,9 @@ procedure( formatPainterCallback(event usrarg)
       formatPainter()
     )
     (eventtype==cnEND_EVENT
-      cnSendCommand(ImportHandle "echo Have a nice day;" ?runOptions silent)
+      ; cnSendCommand(ImportHandle "echo Have a nice day;" ?runOptions silent)
+      cnmpsSleep(2)
+      cnSendCommand(ImportHandle "window;" ?runOptions verbose)
     )
     (t)
     ; TODO: need to figure out when the command was cancelled because i keep getting stuck

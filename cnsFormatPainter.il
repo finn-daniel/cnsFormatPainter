@@ -305,6 +305,9 @@ procedure( formatPainter()
     )
     ; exit paste loop
     cnSendCommand(ImportHandle "exclude B properties;" ?runOptions verbose) ; release B group
+    ; send command to re-draw the window
+    cnSendCommand(ImportHandle "window" ?runOptions verbose)
+    cnSendCommand(ImportHandle ";" ?runOptions verbose)
   )
   t
 )
@@ -319,8 +322,8 @@ procedure( formatPainterCallback(event usrarg)
       formatPainter()
     )
     (eventtype==cnEND_EVENT
-      ; cnSendCommand(ImportHandle "echo Have a nice day;" ?runOptions silent)
-      cnSendCommand(ImportHandle "window;" ?runOptions verbose)
+      cnSendCommand(ImportHandle "echo Have a nice day" ?runOptions silent)
+      cnSendCommand(ImportHandle ";" ?runOptions silent)
     )
     (t)
     ; TODO: need to figure out when the command was cancelled because i keep getting stuck

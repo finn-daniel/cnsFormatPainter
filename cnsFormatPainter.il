@@ -119,41 +119,42 @@ procedure( getPropertyRelativeXY(component property)
     relative_x = nth(0 prop_xy) - nth(0 comp_xy)
     relative_y = nth(1 prop_xy) - nth(1 comp_xy)
     relative_xy = (relative_x : relative_y)
-    prop_just = cnGetPropJustification(property)
-    cond(
-      (prop_just==cnJUSTIF_LEFT
-        just = "left"
-      )
-      (prop_just==cnJUSTIF_CENTER
-        just = "center"
-      )
-      (prop_just==cnJUSTIF_RIGHT
-        just = "right"
-      )
-    )
-    printf("comp at %L, property %s at %L, relative %L, justification=%s\n" comp_xy cnGetPropName(property) prop_xy relative_xy just)
-    ; rounding to fit grid
-    rem_x = remainder(relative_x 50) ; if x is on the grid, remainder should be 0
-    if( (rem_x != 0)
-      if( (rem_x <= 25) 
-        then ; round down
-          relative_x = relative_x - rem_x
-        else ; round up
-          relative_x = relative_x + rem_x
-      )
-    )
-    rem_y = remainder(relative_y 50) ; if y is on the grid, remainder should be 0
-    if( (rem_y != 0)
-      if( (rem_y <= 25) 
-        then ; round down
-          relative_y = relative_y - rem_y
-        else ; round up
-          relative_y = relative_y + rem_y
-      )
-    )
-    relative_xy = (relative_x : relative_y)
-    printf("relative xy after rounding: %L\n" relative_xy)
+    ; prop_just = cnGetPropJustification(property)
+    ; cond(
+    ;   (prop_just==cnJUSTIF_LEFT
+    ;     just = "left"
+    ;   )
+    ;   (prop_just==cnJUSTIF_CENTER
+    ;     just = "center"
+    ;   )
+    ;   (prop_just==cnJUSTIF_RIGHT
+    ;     just = "right"
+    ;   )
+    ; )
+    ; printf("comp at %L, property %s at %L, relative %L, justification=%s\n" comp_xy cnGetPropName(property) prop_xy relative_xy just)
+    printf("comp at %L, property %s at %L, relative %L\n" comp_xy cnGetPropName(property) prop_xy relative_xy)
     relative_xy
+  )
+)
+procedure( findNearestGrid(grid_size point)
+  ; return the nearest grid coordinate
+  let(
+    ( rem )
+    rem = remainder(point grid_size)
+    if( (rem != 0)
+      if( (abs(rem) <= 25) 
+        then ; round down
+          point = point - rem
+        else ; round up
+          if((rem < 0)
+          then
+            point = point + abs(rem) - 50
+          else
+            point = point + 50 - rem
+          )
+      )
+    )
+    point
   )
 )
 
@@ -161,37 +162,37 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
   ; set the position of the property to xy relative to the origin of the component it's attached to
   let(
     ( ; local variable declarations
-      comp_xy prop_xy abs_x abs_y cmd_ret_obj cmd
+      grid_size
+      comp_xy 
+      prop_xy prop_size prop_name prop_value prop_size prop_length
+      abs_x abs_y offset_x offset_y
+      cmd_ret_obj prm_obj_set list_prop_objs cmd
+      group_x group_y group_xy
     )
 
-    unless( (cnGetPropName(property) == "$PN") ; don't want to move pin numbers on top of each other
+    grid_size = cnGetDwgGridSize(cnFindActiveDwg(cnGetDwgInfo(ImportHandle)))
 
-      p_rel_xy = getPropertyRelativeXY(component property)
-      unless( 
-        ( ; check if property is already at correct location
-          (nth(0 p_rel_xy)==nth(0 rel_xy)) && 
-          (nth(1 p_rel_xy)==nth(1 rel_xy))
-        )
-        ; find the origin of the component
-        comp_xy = cnGetCompOriginXY(component)
+    ; use the component origin and the rel_xy to find new absolute coordinates for the property
+    ; find the location of the property so I send a 'select' command to DEHDL to add it to a group
+    prop_xy = cnGetPropXY(property)
+    prop_name = cnGetPropName(property)
+    prop_value = cnGetPropValue(property)
+    prop_size = cnGetPropSize(property)
+    prop_length = length(prop_value)
 
-        ; use the component origin and the rel_xy to find new absolute coordinates for the property
-        ; find the location of the property so I send a 'select' command to DEHDL to add it to a group
-        prop_xy = cnCreatePointString(cnGetPropXY(property))
+    ; find the group grid coordinate
+    group_x = findNearestGrid(grid_size nth(0 prop_xy) + prop_size * prop_length / 2)
+    group_y = findNearestGrid(grid_size nth(1 prop_xy) + prop_size)
+    group_xy = list(group_x group_y)
 
-        abs_x = nth(0 comp_xy)+nth(0 rel_xy)
-        abs_y = nth(1 comp_xy) + nth(1 rel_xy)
+    printf("grid size: %d, prop_size: %d, prop_length: %d\n" grid_size prop_size prop_length)
+    printf("best guess: group coordinate is %s\n" cnCreatePointString(group_x:group_y))
 
-        ; DEHDL command to add property to group so I can move the group (can't just move the property?)
-        cmd = strcat("select Z properties " prop_xy " " prop_xy)
-        cnSendCommand(ImportHandle cmd ?runOptions verbose)
-        ; ; move group command
-        printf("moving %s to %L\n" cnGetPropName(property) (abs_x:abs_y) )
-        cmd = strcat("move Z " cnCreatePointString((abs_x:abs_y)))
-        ; cmd = strcat("move " prop_xy " " cnCreatePointString((abs_x:abs_y)))
-        cnSendCommand(ImportHandle cmd ?runOptions verbose)
-      )
-    )
+    ; DEHDL command to add property to group so I can move/display the group
+    ; (can't just move the property?)
+    cmd = strcat("select Z properties " cnCreatePointString(prop_xy) " " cnCreatePointString(prop_xy))
+    cmd_ret_obj = cnSendCommand(ImportHandle cmd ?runOptions verbose)
+
 
     ; setting the property visibility to match that of the copied component
     p_vis = cnGetPropVisibility(property)
@@ -212,6 +213,42 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
         (t)
       )
     )
+
+    ; try not to select anything but the property I want to move
+    offset_x = prop_size * prop_length / 2
+    offset_y = prop_length / 2
+    prop_xy = list(
+      nth(0 prop_xy) + offset_x,
+      nth(1 prop_xy) + offset_y
+    )
+    prop_xy = cnCreatePointString(prop_xy)
+
+    ; setting the property relative location to match that of the copied component
+    unless( (cnGetPropName(property) == "$PN") ; don't want to move pin numbers on top of each other
+
+      p_rel_xy = getPropertyRelativeXY(component property)
+      unless( 
+        ( ; check if property is already at correct location
+          (nth(0 p_rel_xy)==nth(0 rel_xy)) && 
+          (nth(1 p_rel_xy)==nth(1 rel_xy))
+        )
+        ; find the origin of the component
+        comp_xy = cnGetCompOriginXY(component)
+        printf("comp at %L, property %s at %L, relative %L\n" 
+          comp_xy prop_name prop_xy rel_xy)
+
+        abs_x = nth(0 comp_xy) + nth(0 rel_xy) + offset_x
+        abs_y = nth(1 comp_xy) + nth(1 rel_xy) + offset_y
+
+        ; move group command
+        printf("moving %s to %L\n" cnGetPropName(property) (abs_x:abs_y) )
+        ; cmd = strcat("move Z " cnCreatePointString((abs_x:abs_y)))
+        cmd = strcat("move " prop_xy " " cnCreatePointString((abs_x:abs_y)))
+        cnSendCommand(ImportHandle cmd ?runOptions verbose)
+        ; printf("%L\n" cmd_ret_obj)
+      )
+    )
+
     t
   )
 )
@@ -283,7 +320,6 @@ procedure( formatPainterCallback(event usrarg)
     )
     (eventtype==cnEND_EVENT
       ; cnSendCommand(ImportHandle "echo Have a nice day;" ?runOptions silent)
-      cnmpsSleep(2)
       cnSendCommand(ImportHandle "window;" ?runOptions verbose)
     )
     (t)

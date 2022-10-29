@@ -162,15 +162,18 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
   ; set the position of the property to xy relative to the origin of the component it's attached to
   let(
     ( ; local variable declarations
-      grid_size
+      dwg_id dwg_obj grid_size
       comp_xy 
       prop_xy prop_size prop_name prop_value prop_size prop_length
       abs_x abs_y offset_x offset_y
       cmd_ret_obj prm_obj_set list_prop_objs cmd
-      group_x group_y group_xy
+      ; group_x group_y group_xy
     )
 
-    grid_size = cnGetDwgGridSize(cnFindActiveDwg(cnGetDwgInfo(ImportHandle)))
+    dwg_obj = cnFindActiveDwg(cnGetDwgInfo(ImportHandle))
+    dwg_id = cnGetDwgId(dwg_obj)
+    printf("drawing id: %d\n" dwg_id)
+    grid_size = cnGetDwgGridSize(dwg_obj)
 
     ; use the component origin and the rel_xy to find new absolute coordinates for the property
     ; find the location of the property so I send a 'select' command to DEHDL to add it to a group
@@ -181,18 +184,17 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
     prop_length = length(prop_value)
 
     ; find the group grid coordinate
-    group_x = findNearestGrid(grid_size nth(0 prop_xy) + prop_size * prop_length / 2)
-    group_y = findNearestGrid(grid_size nth(1 prop_xy) + prop_size)
-    group_xy = list(group_x group_y)
+    ; group_x = findNearestGrid(grid_size nth(0 prop_xy) + prop_size * prop_length / 2)
+    ; group_y = findNearestGrid(grid_size nth(1 prop_xy) + prop_size)
+    ; group_xy = list(group_x group_y)
 
-    printf("grid size: %d, prop_size: %d, prop_length: %d\n" grid_size prop_size prop_length)
-    printf("best guess: group coordinate is %s\n" cnCreatePointString(group_x:group_y))
+    ; printf("grid size: %d, prop_size: %d, prop_length: %d\n" grid_size prop_size prop_length)
+    ; printf("best guess: group coordinate is %s\n" cnCreatePointString(group_x:group_y))
 
     ; DEHDL command to add property to group so I can move/display the group
     ; (can't just move the property?)
     cmd = strcat("select Z properties " cnCreatePointString(prop_xy) " " cnCreatePointString(prop_xy))
     cmd_ret_obj = cnSendCommand(ImportHandle cmd ?runOptions verbose)
-
 
     ; setting the property visibility to match that of the copied component
     p_vis = cnGetPropVisibility(property)
@@ -214,14 +216,18 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
       )
     )
 
-    ; try not to select anything but the property I want to move
-    offset_x = prop_size * prop_length / 2
-    offset_y = prop_length / 2
-    prop_xy = list(
-      nth(0 prop_xy) + offset_x,
-      nth(1 prop_xy) + offset_y
-    )
-    prop_xy = cnCreatePointString(prop_xy)
+    ; ; try not to select anything but the property I want to move
+    ; offset_x = prop_size * prop_length / 2
+    ; offset_y = prop_length / 2
+    ; prop_xy = list(
+    ;   nth(0 prop_xy) + offset_x,
+    ;   nth(1 prop_xy) + offset_y
+    ; )
+    ; prop_xy = cnCreatePointString(prop_xy)
+
+    ; TODO: after the first move, read the property location again. 
+    ; now we know the group location (abs_x:abs_y) and the property actual location
+    ; calculate the delta, add it to the original coordinate, and send the move command again.
 
     ; setting the property relative location to match that of the copied component
     unless( (cnGetPropName(property) == "$PN") ; don't want to move pin numbers on top of each other
@@ -234,23 +240,39 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
         )
         ; find the origin of the component
         comp_xy = cnGetCompOriginXY(component)
-        printf("comp at %L, property %s at %L, relative %L\n" 
-          comp_xy prop_name prop_xy rel_xy)
 
-        abs_x = nth(0 comp_xy) + nth(0 rel_xy) + offset_x
-        abs_y = nth(1 comp_xy) + nth(1 rel_xy) + offset_y
+        abs_x = nth(0 comp_xy) + nth(0 rel_xy)
+        abs_y = nth(1 comp_xy) + nth(1 rel_xy)
 
         ; move group command
         printf("moving %s to %L\n" cnGetPropName(property) (abs_x:abs_y) )
-        ; cmd = strcat("move Z " cnCreatePointString((abs_x:abs_y)))
-        cmd = strcat("move " prop_xy " " cnCreatePointString((abs_x:abs_y)))
+        cmd = strcat("move Z " cnCreatePointString((abs_x:abs_y)))
+        ; cmd = strcat("move " prop_xy " " cnCreatePointString((abs_x:abs_y)))
+        cmd_ret_obj = cnSendCommand(ImportHandle cmd ?runOptions verbose)
+
+        prm_obj_set = cnGetAddedObjectSet(cmd_ret_obj dwg_id)
+        prop_obj_set = cnGetProps(prm_obj_set)
+
+        property = nth(0 prop_obj_set)
+
+        prop_xy = cnGetPropXY(property)
+        printf("prop_xy after first move: %L\n" prop_xy)
+
+        ; get offset from group location
+        offset_x = abs_x - nth(0 prop_xy)
+        offset_y = abs_y - nth(1 prop_xy)
+
+        ; printf("group location: %L, property location: %L, delta: %L" abs_x:abs_y)
+        abs_x = abs_x + offset_x
+        abs_y = abs_y + offset_y
+        ; move group command
+        printf("moving %s to %L\n" cnGetPropName(property) (abs_x:abs_y) )
+        cmd = strcat("move Z " cnCreatePointString((abs_x:abs_y)))
         cnSendCommand(ImportHandle cmd ?runOptions verbose)
-        ; printf("%L\n" cmd_ret_obj)
       )
     )
-
-    t
   )
+  t
 )
 
 procedure( formatPainter()
@@ -326,7 +348,6 @@ procedure( formatPainterCallback(event usrarg)
       cnSendCommand(ImportHandle ";" ?runOptions silent)
     )
     (t)
-    ; TODO: need to figure out when the command was cancelled because i keep getting stuck
   )
 )
 

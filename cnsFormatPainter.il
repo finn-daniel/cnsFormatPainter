@@ -167,6 +167,7 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
       prop_xy prop_size prop_name prop_value prop_size prop_length
       abs_x abs_y offset_x offset_y
       cmd_ret_obj prm_obj_set list_prop_objs cmd
+      try_x try_y
       ; group_x group_y group_xy
     )
 
@@ -247,7 +248,6 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
         ; move group command
         printf("moving %s to %L\n" cnGetPropName(property) (abs_x:abs_y) )
         cmd = strcat("move Z " cnCreatePointString((abs_x:abs_y)))
-        ; cmd = strcat("move " prop_xy " " cnCreatePointString((abs_x:abs_y)))
         cmd_ret_obj = cnSendCommand(ImportHandle cmd ?runOptions verbose)
 
         prm_obj_set = cnGetAddedObjectSet(cmd_ret_obj dwg_id)
@@ -255,20 +255,33 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
 
         property = nth(0 prop_obj_set)
 
-        prop_xy = cnGetPropXY(property)
-        printf("prop_xy after first move: %L\n" prop_xy)
+        actual_loc = cnGetPropXY(property)
+        printf("prop_xy after move: %L\n" actual_loc)
 
-        ; get offset from group location
-        offset_x = abs_x - nth(0 prop_xy)
-        offset_y = abs_y - nth(1 prop_xy)
+        tries = 0
 
-        ; printf("group location: %L, property location: %L, delta: %L" abs_x:abs_y)
-        abs_x = abs_x + offset_x
-        abs_y = abs_y + offset_y
-        ; move group command
-        printf("moving %s to %L\n" cnGetPropName(property) (abs_x:abs_y) )
-        cmd = strcat("move Z " cnCreatePointString((abs_x:abs_y)))
-        cnSendCommand(ImportHandle cmd ?runOptions verbose)
+        while( (((nth(0 actual_loc) != abs_x) || (nth(1 actual_loc) != abs_y)) && (tries < 10))
+
+          ; get offset from group location
+          offset_x = abs_x - nth(0 actual_loc)
+          offset_y = abs_y - nth(1 actual_loc)
+
+          ; printf("group location: %L, property location: %L, delta: %L" abs_x:abs_y)
+          try_x = abs_x + offset_x
+          try_y = abs_y + offset_y
+          ; move group command
+          printf("moving %s to %L\n" cnGetPropName(property) (try_x:try_y) )
+          cmd = strcat("move Z " cnCreatePointString((try_x:try_y)))
+          cmd_ret_obj = cnSendCommand(ImportHandle cmd ?runOptions verbose)
+          prm_obj_set = cnGetAddedObjectSet(cmd_ret_obj dwg_id)
+          prop_obj_set = cnGetProps(prm_obj_set)
+
+          property = nth(0 prop_obj_set)
+
+          actual_loc = cnGetPropXY(property)
+          printf("prop_xy after move: %L\n" actual_loc)
+          tries += 1
+        )
       )
     )
   )

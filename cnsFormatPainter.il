@@ -225,7 +225,7 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
     unless( (p_vis==visibility); visibility already matches, don't need to do anything
       cond(
         (visibility==0 ; invisible
-          printf("visibility is 0. Shouldn't have been able to get here\n")
+          cnSendCommand(ImportHandle "display invisible Z" ?runOptions verbose)
         )
         (visibility==1 ; value only
           cnSendCommand(ImportHandle "display value Z" ?runOptions verbose)
@@ -344,12 +344,13 @@ procedure( formatPainter()
 
             foreach( c_prop copy_props
               c_prop_visibility=cnGetPropVisibility(c_prop)
-              unless( (c_prop_visibility == 0) ; if the property is invisible, we don't do anything TODO: what if the property is visible on paste object?
-                c_prop_name=cnGetPropName(c_prop)
-                ; check if that property name shows up in paste_props
-                foreach( p_prop paste_props
-                  p_prop_name=cnGetPropName(p_prop)
-                  if( (p_prop_name == c_prop_name) then
+              c_prop_name=cnGetPropName(c_prop)
+              ; check if that property name shows up in paste_props
+              foreach( p_prop paste_props
+                p_prop_name=cnGetPropName(p_prop)
+                if( (p_prop_name == c_prop_name) then
+                  ; if both properties are invisible, don't do anything
+                  unless( (cnGetPropVisibility(p_prop) == 0 && c_prop_visibility == 0)
                     ; found a matching property
                     c_prop_value=cnGetPropValue(c_prop)
                     c_relative_xy = getPropertyRelativeXY(copy_component c_prop)

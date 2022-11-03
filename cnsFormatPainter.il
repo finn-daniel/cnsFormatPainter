@@ -204,14 +204,14 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
     list_prop_objs = cnGetProps(cnGetGroupedObjectSet(cmd_ret_obj))
     printf("%L\n" list_prop_objs)
 
-    while( (length(list_prop_objs) > 1 || cnGet) ; if more than one property in group, or 
+    if( (length(list_prop_objs) > 1) then ; if more than one property in group
       printf("group cmd at %L added %d properties to the group:\n" prop_xy length(list_prop_objs))
       foreach( prop list_prop_objs
         printf("%s %s %L\n" cnGetPropName(prop) cnGetPropValue(prop) cnGetPropXY(prop))
         if((cnGetPropName(prop) != prop_name) then
           x_prop_xy = cnGetPropXY(prop)
-          x_prop_xy_bbox = (nth(0 x_prop_xy) + 5 : nth(1 x_prop_xy))
-          cmd = strcat("exclude z " cnCreatePointString(x_prop_xy) cnCreatePointString(nth(0)))
+          x_prop_xy_bbox = list(nth(0 x_prop_xy) + 5, nth(1 x_prop_xy) + 5)
+          cmd = strcat("exclude z " cnCreatePointString(x_prop_xy) cnCreatePointString(x_prop_xy_bbox))
           cnSendCommand(ImportHandle cmd ?runOptions verbose)
           ; check if the property got excluded
           cmd_ret_obj = cnSendCommand(ImportHandle "show group z" ?runOptions verbose)

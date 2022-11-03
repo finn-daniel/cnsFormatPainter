@@ -46,22 +46,9 @@ procedure( getClickedComponent(prompt)
     ; wait for the callback to finish
     while((mouse_coord==nil)
       cnmpsSleep(ImportHandle 1)
-      if( (count == 5) then
-        cmd_ret_obj = cnSendCommand(ImportHandle "echo formatPainter mode check" ?runOptions silent)
-        printf("%L\n" cmd_ret_obj)
-        ; dwg_info = cnGetDwgInfo(ImportHandle)
-        ; printf("%L\n" dwg_info)
-        count = 0
-      else
-        count += 1
-      )
-
-      ; TODO: debug me -- sometimes the callback doesn't get called after an event, and I get stuck here
-      ; seems like if you do a mouse drag it gets off in the weeds.
-      ; TODO: can I check if the application is still in formatPainter command mode while I'm stuck in this loop?
-      ; if((cnGetSetupPreselectMode())
-      ;   printf("DEHDL is in preselect mode\n")
-      ; )
+      ; TODO: I get stuck here if the user does a wiredrag, undo, or basically anything other than a mouse click.
+      ; need to find a workaround, because it's easy to do an accidental mouse drag. DEHDL exits formatPainter command
+      ; mode without any notification and I haven't figured out a way to ask it if the mode changed.
     )
 
     ; I can't seem to figure out how to get a ImportHandle to a component object, other than trying to select
@@ -170,7 +157,7 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
       prop_xy prop_size prop_name prop_value prop_size prop_length
       abs_x abs_y offset_x offset_y
       cmd_ret_obj prm_obj_set list_prop_objs cmd
-      try_x try_y x_prop_xy
+      try_x try_y x_prop_xy x_prop_xy_bbox
       ; group_x group_y group_xy
     )
 
@@ -187,14 +174,6 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
     prop_size = cnGetPropSize(property)
     prop_length = length(prop_value)
 
-    ; find the group grid coordinate
-    ; group_x = findNearestGrid(grid_size nth(0 prop_xy) + prop_size * prop_length / 2)
-    ; group_y = findNearestGrid(grid_size nth(1 prop_xy) + prop_size)
-    ; group_xy = list(group_x group_y)
-
-    ; printf("grid size: %d, prop_size: %d, prop_length: %d\n" grid_size prop_size prop_length)
-    ; printf("best guess: group coordinate is %s\n" cnCreatePointString(group_x:group_y))
-
     ; DEHDL command to add property to group so I can move/display the group
     ; (can't just move the property?)
     cmd = strcat("select Z properties " cnCreatePointString(prop_xy) " " cnCreatePointString(prop_xy))
@@ -205,17 +184,14 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
     printf("%L\n" list_prop_objs)
 
     if( (length(list_prop_objs) > 1) then ; if more than one property in group
-      printf("group cmd at %L added %d properties to the group:\n" prop_xy length(list_prop_objs))
       foreach( prop list_prop_objs
-        printf("%s %s %L\n" cnGetPropName(prop) cnGetPropValue(prop) cnGetPropXY(prop))
+        ; find the property that i want to remove from the group
         if((cnGetPropName(prop) != prop_name) then
           x_prop_xy = cnGetPropXY(prop)
           x_prop_xy_bbox = list(nth(0 x_prop_xy) + 5, nth(1 x_prop_xy) + 5)
+          ; exclude command
           cmd = strcat("exclude z " cnCreatePointString(x_prop_xy) cnCreatePointString(x_prop_xy_bbox))
           cnSendCommand(ImportHandle cmd ?runOptions verbose)
-          ; check if the property got excluded
-          cmd_ret_obj = cnSendCommand(ImportHandle "show group z" ?runOptions verbose)
-          printf("%L\n" cmd_ret_obj)
         )
       )
     )
@@ -239,19 +215,6 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
         (t)
       )
     )
-
-    ; ; try not to select anything but the property I want to move
-    ; offset_x = prop_size * prop_length / 2
-    ; offset_y = prop_length / 2
-    ; prop_xy = list(
-    ;   nth(0 prop_xy) + offset_x,
-    ;   nth(1 prop_xy) + offset_y
-    ; )
-    ; prop_xy = cnCreatePointString(prop_xy)
-
-    ; TODO: after the first move, read the property location again. 
-    ; now we know the group location (abs_x:abs_y) and the property actual location
-    ; calculate the delta, add it to the original coordinate, and send the move command again.
 
     ; setting the property relative location to match that of the copied component
     unless( (cnGetPropName(property) == "$PN") ; don't want to move pin numbers on top of each other

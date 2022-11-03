@@ -27,6 +27,7 @@ procedure( getMouseButtonCallback( event coord )
   printf("Clicked coordinate: %L\n",coord)
 )
 
+;TODO: is there a way to lock the user out of making edits while this command is running?
 procedure( getClickedComponent(prompt)
   let(
     ; local variable declarations
@@ -35,13 +36,26 @@ procedure( getClickedComponent(prompt)
       cmd_ret_obj prm_obj_set comp_obj_set
       topLeft botRight
       cmd comp_obj
+      count dwg_info
     )
 
+    count = 0
     mouse_coord=nil
+
     cnRequestMousePress(ImportHandle, `getMouseButtonCallback, `mouse_coord, prompt)
     ; wait for the callback to finish
     while((mouse_coord==nil)
       cnmpsSleep(ImportHandle 1)
+      if( (count == 5) then
+        cmd_ret_obj = cnSendCommand(ImportHandle "echo formatPainter mode check" ?runOptions silent)
+        printf("%L\n" cmd_ret_obj)
+        ; dwg_info = cnGetDwgInfo(ImportHandle)
+        ; printf("%L\n" dwg_info)
+        count = 0
+      else
+        count += 1
+      )
+
       ; TODO: debug me -- sometimes the callback doesn't get called after an event, and I get stuck here
       ; seems like if you do a mouse drag it gets off in the weeds.
       ; TODO: can I check if the application is still in formatPainter command mode while I'm stuck in this loop?
@@ -119,23 +133,11 @@ procedure( getPropertyRelativeXY(component property)
     relative_x = nth(0 prop_xy) - nth(0 comp_xy)
     relative_y = nth(1 prop_xy) - nth(1 comp_xy)
     relative_xy = (relative_x : relative_y)
-    ; prop_just = cnGetPropJustification(property)
-    ; cond(
-    ;   (prop_just==cnJUSTIF_LEFT
-    ;     just = "left"
-    ;   )
-    ;   (prop_just==cnJUSTIF_CENTER
-    ;     just = "center"
-    ;   )
-    ;   (prop_just==cnJUSTIF_RIGHT
-    ;     just = "right"
-    ;   )
-    ; )
-    ; printf("comp at %L, property %s at %L, relative %L, justification=%s\n" comp_xy cnGetPropName(property) prop_xy relative_xy just)
     printf("comp at %L, property %s at %L, relative %L\n" comp_xy cnGetPropName(property) prop_xy relative_xy)
     relative_xy
   )
 )
+
 procedure( findNearestGrid(grid_size point)
   ; return the nearest grid coordinate
   let(
@@ -158,6 +160,7 @@ procedure( findNearestGrid(grid_size point)
   )
 )
 
+; TODO this should be two functions
 procedure( setPropertyVisAndXY(component property rel_xy visibility)
   ; set the position of the property to xy relative to the origin of the component it's attached to
   let(
@@ -167,7 +170,7 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
       prop_xy prop_size prop_name prop_value prop_size prop_length
       abs_x abs_y offset_x offset_y
       cmd_ret_obj prm_obj_set list_prop_objs cmd
-      try_x try_y
+      try_x try_y x_prop_xy
       ; group_x group_y group_xy
     )
 
@@ -196,6 +199,26 @@ procedure( setPropertyVisAndXY(component property rel_xy visibility)
     ; (can't just move the property?)
     cmd = strcat("select Z properties " cnCreatePointString(prop_xy) " " cnCreatePointString(prop_xy))
     cmd_ret_obj = cnSendCommand(ImportHandle cmd ?runOptions verbose)
+
+    ; check if any properties we don't want have been added to the group
+    list_prop_objs = cnGetProps(cnGetGroupedObjectSet(cmd_ret_obj))
+    printf("%L\n" list_prop_objs)
+
+    while( (length(list_prop_objs) > 1 || cnGet) ; if more than one property in group, or 
+      printf("group cmd at %L added %d properties to the group:\n" prop_xy length(list_prop_objs))
+      foreach( prop list_prop_objs
+        printf("%s %s %L\n" cnGetPropName(prop) cnGetPropValue(prop) cnGetPropXY(prop))
+        if((cnGetPropName(prop) != prop_name) then
+          x_prop_xy = cnGetPropXY(prop)
+          x_prop_xy_bbox = (nth(0 x_prop_xy) + 5 : nth(1 x_prop_xy))
+          cmd = strcat("exclude z " cnCreatePointString(x_prop_xy) cnCreatePointString(nth(0)))
+          cnSendCommand(ImportHandle cmd ?runOptions verbose)
+          ; check if the property got excluded
+          cmd_ret_obj = cnSendCommand(ImportHandle "show group z" ?runOptions verbose)
+          printf("%L\n" cmd_ret_obj)
+        )
+      )
+    )
 
     ; setting the property visibility to match that of the copied component
     p_vis = cnGetPropVisibility(property)
@@ -350,6 +373,18 @@ procedure( formatPainter()
 procedure( formatPainterCallback(event usrarg)
   eventtype=cnGetEventType(event)
   cond(
+    (eventtype==cnTEXTINPUT_EVENT
+      printf("received TEXTINPUT event\n") ; debug mouse drag hang
+    )
+    (eventtype==cnMOUSEPRESS_EVENT
+      printf("received MOUSEPRESS event\n") ; debug mouse drag hang
+    )
+    (eventtype==cnACTIVATE_EVENT
+      printf("received ACTIVATE event\n") ; debug mouse drag hang
+    )
+    (eventtype==cnENDOFLINE_EVENT
+      printf("received ENDOFLINE event\n") ; debug mouse drag hang
+    )
     (eventtype==cnABORT_EVENT
       printf("received ABORT event\n") ; debug mouse drag hang
     )
@@ -369,10 +404,19 @@ procedure( cnCommands_formatPainterServer()
     list("formatPainter",
       list(
         list(
-          cnABORT_EVENT,
+          cnTEXTINPUT_EVENT,
+          cnMOUSEPRESS_EVENT,
           cnSTART_EVENT,
-          cnEND_EVENT
+          cnEND_EVENT,
+          cnABORT_EVENT,
+          cnACTIVATE_EVENT,
+          cnENDOFLINE_EVENT
         )
+        ; list(
+        ;   cnABORT_EVENT,
+        ;   cnSTART_EVENT,
+        ;   cnEND_EVENT
+        ; )
         'formatPainterCallback
       )
     )
